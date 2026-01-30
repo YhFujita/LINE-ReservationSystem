@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <base target="_top">
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        input[type="date"],
+        input[type="time"] {
+            width: 100%;
+            padding: 8px;
+            box-sizing: border-box;
+        }
+
+        button {
+            width: 100%;
+            padding: 10px;
+            background-color: #06c755;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        button:hover {
+            background-color: #05b34c;
+        }
+
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        #status {
+            margin-top: 10px;
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .slot-preview {
+            margin-top: 10px;
+            border: 1px solid #ddd;
+            padding: 10px;
+            border-radius: 4px;
+            background: #f9f9f9;
+        }
+
+        .slot-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .slot-list li {
+            padding: 5px 0;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .remove-btn {
+            color: red;
+            cursor: pointer;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="form-group">
+        <label>日付</label>
+        <input type="date" id="dateInput">
+    </div>
+    <div class="form-group">
+        <label>開始時刻</label>
+        <input type="time" id="timeInput" value="10:00" step="1800">
+    </div>
+
+    <button id="addToListBtn" type="button" style="background-color: #666; margin-bottom: 10px;">リストに追加</button>
+
+    <div class="slot-preview" id="previewArea" style="display:none;">
+        <label>追加する予約枠:</label>
+        <ul id="slotList" class="slot-list"></ul>
+    </div>
+
+    <button id="saveBtn" style="margin-top: 15px;" disabled>予約枠を保存する</button>
+    <div id="status"></div>
+
+    <script>
+        const slotList = document.getElementById('slotList');
+        const previewArea = document.getElementById('previewArea');
+        const saveBtn = document.getElementById('saveBtn');
+        const statusDiv = document.getElementById('status');
+        let slotsToAdd = [];
+
+        document.getElementById('addToListBtn').addEventListener('click', function () {
+            const dateVal = document.getElementById('dateInput').value;
+            const timeVal = document.getElementById('timeInput').value;
+
+            if (!dateVal || !timeVal) {
+                alert('日付と時刻を選択してください');
+                return;
+            }
+
+            const formattedSlot = dateVal.replace(/-/g, '/') + ' ' + timeVal;
+
+            if (slotsToAdd.includes(formattedSlot)) {
+                alert('その日時は既にリストに含まれています');
+                return;
+            }
+
+            slotsToAdd.push(formattedSlot);
+            renderList();
+        });
+
+        function renderList() {
+            slotList.innerHTML = '';
+            if (slotsToAdd.length > 0) {
+                previewArea.style.display = 'block';
+                saveBtn.disabled = false;
+                slotsToAdd.sort();
+
+                slotsToAdd.forEach((slot, index) => {
+                    const li = document.createElement('li');
+                    li.innerHTML = `<span>${slot}</span> <span class="remove-btn" onclick="removeSlot(${index})">×</span>`;
+                    slotList.appendChild(li);
+                });
+            } else {
+                previewArea.style.display = 'none';
+                saveBtn.disabled = true;
+            }
+        }
+
+        window.removeSlot = function (index) {
+            slotsToAdd.splice(index, 1);
+            renderList();
+        }
+
+        saveBtn.addEventListener('click', function () {
+            if (slotsToAdd.length === 0) return;
+
+            saveBtn.disabled = true;
+            saveBtn.textContent = '保存中...';
+            statusDiv.textContent = 'スプレッドシートに保存しています...';
+
+            google.script.run
+                .withSuccessHandler(function (response) {
+                    saveBtn.textContent = '保存完了';
+                    statusDiv.textContent = '保存しました！続けて登録できます。';
+                    slotsToAdd = [];
+                    renderList();
+                    setTimeout(() => {
+                        saveBtn.textContent = '予約枠を保存する';
+                        saveBtn.disabled = true;
+                    }, 2000);
+                })
+                .withFailureHandler(function (error) {
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = '予約枠を保存する';
+                    statusDiv.textContent = 'エラーが発生しました: ' + error.message;
+                })
+                .addSlotsFromSidebar(slotsToAdd);
+        });
+    </script>
+</body>
+
+</html>

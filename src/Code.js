@@ -114,3 +114,66 @@ function doGet(e) {
     output.setContent(JSON.stringify({ status: 'running', message: 'GAS Backend is active. Use ?action=get_data' }));
     return output;
 }
+
+// --- Trigger Setup ---
+
+/**
+ * Run this function ONCE from the GAS Editor to install the trigger.
+ */
+function setupTriggers() {
+    // Prevent duplicate triggers
+    var triggers = ScriptApp.getProjectTriggers();
+    for (var i = 0; i < triggers.length; i++) {
+        if (triggers[i].getHandlerFunction() === 'onSpreadsheetEdit') {
+            ScriptApp.deleteTrigger(triggers[i]);
+        }
+    }
+
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    ScriptApp.newTrigger('onSpreadsheetEdit')
+        .forSpreadsheet(ss)
+        .onEdit()
+        .create();
+
+    console.log('Trigger set up successfully.');
+}
+
+/**
+ * Triggered automatically when the spreadsheet is edited.
+ * Checks if the edited sheet is 'メニュー設定', and if so, refreshes the cache.
+ */
+function onSpreadsheetEdit(e) {
+    if (!e) return;
+
+    var sheetName = e.range.getSheet().getName();
+
+    if (sheetName === 'メニュー設定') {
+        console.log('Menu sheet edited. Updating cache...');
+        SheetUtils.updateMenuCache();
+    }
+}
+
+// --- Sidebar & Menus ---
+
+function onOpen(e) {
+    SpreadsheetApp.getUi()
+        .createMenu('予約管理')
+        .addItem('予約枠設定', 'showSidebar')
+        .addToUi();
+}
+
+function showSidebar() {
+    var html = HtmlService.createHtmlOutputFromFile('sidebar')
+        .setTitle('予約枠登録')
+        .setWidth(300);
+    SpreadsheetApp.getUi().showSidebar(html);
+}
+
+function addSlotsFromSidebar(slots) {
+    try {
+        SheetUtils.addSlots(slots);
+        return { status: 'success' };
+    } catch (error) {
+        throw new Error(error.toString());
+    }
+}

@@ -1,0 +1,10 @@
+index.html
+js/
+css/
+.git/
+.gitignore
+README.md
+task.md
+implementation_plan.md
+walkthrough.md
+**/*.md
