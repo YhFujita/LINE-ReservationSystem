@@ -39,8 +39,8 @@ var SheetUtils = (function () {
         if (!sheet) {
             sheet = ss.insertSheet(name);
             if (name === SHEET_NAME_RESERVATIONS) {
-                // Modified header to include '金額'
-                sheet.appendRow(['日時', '予約ID', '予約者名', 'メニュー', '金額', '希望日時', '電話番号', '備考', 'ステータス']);
+                // Modified header to include '金額', swapped Date columns
+                sheet.appendRow(['希望日時', '予約ID', '予約者名', 'メニュー', '金額', '送信日時', '電話番号', '備考', 'ステータス']);
             } else if (name === SHEET_NAME_MENU) {
                 sheet.appendRow(['ID', 'メニュー名', '価格', '所要時間(分)', '説明', '表示順']);
                 // Add sample data
@@ -84,13 +84,13 @@ var SheetUtils = (function () {
             }
 
             sheet.appendRow([
-                formattedTimestamp, // Recorded at
+                formattedBookingDate, // Desired Date (A Column)
                 id,
                 data.name,
                 data.menu,
                 price, // Saved Price
-                formattedBookingDate, // Desired Date (Japanese Format)
-                data.phone,
+                formattedTimestamp, // Recorded at (F Column)
+                "'" + data.phone,
                 data.notes,
                 '受付'
             ]);
