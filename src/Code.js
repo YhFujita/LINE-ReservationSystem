@@ -114,4 +114,3 @@ function doGet(e) {
     output.setContent(JSON.stringify({ status: 'running', message: 'GAS Backend is active. Use ?action=get_data' }));
     return output;
 }
-```

@@ -35,44 +35,53 @@ var SheetUtils = (function () {
         return sheet;
     }
 
+    function formatDateJP(date) {
+        var days = ['日', '月', '火', '水', '木', '金', '土'];
+        var y = date.getFullYear();
+        var m = date.getMonth() + 1;
+        var d = date.getDate();
+        var day = days[date.getDay()];
+        var H = ('0' + date.getHours()).slice(-2);
+        var M = ('0' + date.getMinutes()).slice(-2);
+        return y + '年' + m + '月' + d + '日(' + day + ') ' + H + ':' + M;
+    }
+
     return {
         appendReservation: function (data) {
             var sheet = getSheet(SHEET_NAME_RESERVATIONS);
             var id = Utilities.getUuid();
             var timestamp = new Date();
+            var formattedTimestamp = formatDateJP(timestamp);
+
+            // Convert normalized input datetime (YYYY/MM/DD HH:mm) to Display Format for consistent sheet storage
+            var bookingDate = new Date(data.datetime);
+            var formattedBookingDate = formatDateJP(bookingDate);
 
             sheet.appendRow([
-                timestamp,
+                formattedTimestamp, // Recorded at
                 id,
                 data.name,
                 data.menu,
-                data.datetime,
+                formattedBookingDate, // Desired Date (Japanese Format)
                 data.phone,
                 data.notes,
-                '受付' // Initial status
+                '受付'
             ]);
             return id;
         },
 
         getMenuItems: function () {
-            // Try reading from PropertyService (Cache) first for speed
             var scriptProperties = PropertiesService.getScriptProperties();
             var cachedMenu = scriptProperties.getProperty(CACHE_KEY_MENU);
-
-            if (cachedMenu) {
-                return JSON.parse(cachedMenu);
-            }
-
-            // If no cache, read from sheet and update cache
+            if (cachedMenu) return JSON.parse(cachedMenu);
             return this.updateMenuCache();
         },
 
         updateMenuCache: function () {
             var sheet = getSheet(SHEET_NAME_MENU);
             var data = sheet.getDataRange().getValues();
-            var headers = data.shift(); // Remove header row
+            var headers = data.shift();
 
-            // Convert to array of objects
             var menuItems = data.map(function (row) {
                 return {
                     id: row[0],
@@ -82,17 +91,10 @@ var SheetUtils = (function () {
                     description: row[4],
                     order: row[5]
                 };
-            }).filter(function (item) {
-                // Filter out empty rows
-                return item.id && item.name;
-            }).sort(function (a, b) {
-                return a.order - b.order;
-            });
+            }).filter(function (item) { return item.id && item.name; })
+                .sort(function (a, b) { return a.order - b.order; });
 
-            // Save to Script Properties
-            var scriptProperties = PropertiesService.getScriptProperties();
-            scriptProperties.setProperty(CACHE_KEY_MENU, JSON.stringify(menuItems));
-
+            PropertiesService.getScriptProperties().setProperty(CACHE_KEY_MENU, JSON.stringify(menuItems));
             return menuItems;
         },
 
@@ -105,7 +107,16 @@ var SheetUtils = (function () {
             var slots = data.filter(function (row) {
                 return row[1] === '空き';
             }).map(function (row) {
-                return Utilities.formatDate(new Date(row[0]), Session.getScriptTimeZone(), 'yyyy/MM/dd HH:mm');
+                var date = new Date(row[0]);
+                return {
+                    value: Utilities.formatDate(date, Session.getScriptTimeZone(), 'yyyy/MM/dd HH:mm'), // Normalized ID
+                    display: formatDateJP(date) // Display text
+                };
+            });
+
+            // Sort by date
+            slots.sort(function (a, b) {
+                return a.value.localeCompare(b.value);
             });
 
             return slots;

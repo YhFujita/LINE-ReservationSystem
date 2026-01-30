@@ -37,8 +37,9 @@ window.onload = function () {
                     } else {
                         data.slots.forEach(slot => {
                             const option = document.createElement('option');
-                            option.value = slot; // "yyyy/MM/dd HH:mm"
-                            option.textContent = slot;
+                            // slot = { value: "yyyy/MM/dd HH:mm", display: "yyyy年... (Japanese)" }
+                            option.value = slot.value;
+                            option.textContent = slot.display;
                             dateSelect.appendChild(option);
                         });
                     }
