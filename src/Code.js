@@ -127,6 +127,14 @@ function doPost(e) {
         // Save to spreadsheet
         var id = SheetUtils.appendReservation(data);
 
+        // --- Notifications ---
+        try {
+            sendAdminNotifications(data, id);
+        } catch (e) {
+            console.error('Notification Error:', e);
+            // Don't fail the request just because notification failed, but log it.
+        }
+
         var result = {
             status: 'success',
             message: '予約を受け付けました',
