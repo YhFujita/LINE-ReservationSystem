@@ -18,6 +18,7 @@ window.onload = function () {
         const name = document.getElementById('name').value;
         const phone = document.getElementById('phone').value;
         const notes = document.getElementById('notes').value;
+        const honeypot = document.getElementById('honeypot').value;
 
         if (!menu || !datetime || !name || !phone) {
             alert('すべての必須項目を入力してください。');
@@ -38,7 +39,8 @@ window.onload = function () {
             datetime: datetime,
             name: name,
             phone: phone,
-            notes: notes
+            notes: notes,
+            honeypot: honeypot // Bot check
         };
 
         // Call GAS API via fetch

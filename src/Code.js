@@ -3,8 +3,6 @@ function doPost(e) {
     output.setMimeType(ContentService.MimeType.JSON);
 
     try {
-        // Parse the POST data
-        // When sending JSON from fetch, it might come as postData.contents
         var data;
         if (e.postData && e.postData.contents) {
             data = JSON.parse(e.postData.contents);
@@ -12,12 +10,31 @@ function doPost(e) {
             throw new Error('No data received');
         }
 
+        // --- SECURITY CHECKS ---
+
+        // 1. Honeypot check (Spam prevention)
+        // If the hidden field 'honeypot' has a value, it's likely a bot.
+        if (data.honeypot) {
+            // Return success to confuse the bot, but do NOT save.
+            console.warn('Bot detected via honeypot');
+            output.setContent(JSON.stringify({ status: 'success', message: 'Received' }));
+            return output;
+        }
+
+        // 2. Input Validation
+        if (!data.menu || !data.datetime || !data.name || !data.phone) {
+            throw new Error('必須項目が不足しています');
+        }
+
+        if (data.name.length > 50) throw new Error('名前が長すぎます');
+        if (data.phone.length > 20) throw new Error('電話番号の形式が正しくありません');
+        if (data.notes && data.notes.length > 500) throw new Error('備考欄は500文字以内で入力してください');
+
+        // -----------------------
+
         // Save to spreadsheet
         var id = SheetUtils.appendReservation(data);
 
-        // Return success response with CORS headers simulated by text output
-        // Note: GAS Web App redirects make true CORS headers complex, 
-        // but returning JSON usually works if client follows redirects.
         var result = {
             status: 'success',
             message: '予約を受け付けました',
@@ -36,7 +53,6 @@ function doPost(e) {
     return output;
 }
 
-// Keep doGet distinct for debug or simple check
 function doGet(e) {
     var output = ContentService.createTextOutput(JSON.stringify({ status: 'running', message: 'GAS Backend is active' }));
     output.setMimeType(ContentService.MimeType.JSON);

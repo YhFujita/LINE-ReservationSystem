@@ -49,6 +49,11 @@
                     <textarea id="notes" name="notes" rows="3" placeholder="ご要望があればご記入ください"></textarea>
                 </div>
 
+                <!-- HONEYPOT FIELD (Hidden from humans, visible to bots) -->
+                <div style="display:none; opacity:0; position:absolute; left:-9999px;">
+                    <input type="text" id="honeypot" name="honeypot" tabindex="-1" autocomplete="off">
+                </div>
+
                 <button type="submit" id="submitBtn">
                     <span>予約を確定する</span>
                 </button>
