@@ -135,6 +135,15 @@ function doPost(e) {
             // Don't fail the request just because notification failed, but log it.
         }
 
+        // --- LINE Notification to User ---
+        if (data.userId) {
+            try {
+                sendLineNotification(data.userId, data);
+            } catch (e) {
+                console.error('LINE Notification Error:', e);
+            }
+        }
+
         var result = {
             status: 'success',
             message: '予約を受け付けました',

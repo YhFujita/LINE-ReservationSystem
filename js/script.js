@@ -1,6 +1,17 @@
 window.onload = function () {
-    // Initialize LIFF logic if LIFF ID is provided later
-    // liff.init({ liffId: "YOUR_LIFF_ID" })...
+    // Initialize LIFF logic
+    // Replace "YOUR_LIFF_ID" with your actual LIFF ID from LINE Developers Console
+    // or set it via a global config if preferred. Using a placeholder here for user update.
+    liff.init({ liffId: "YOUR_LIFF_ID" })
+        .then(() => {
+            console.log("LIFF Initialized");
+            if (!liff.isLoggedIn()) {
+                liff.login();
+            }
+        })
+        .catch((err) => {
+            console.error("LIFF Init failed", err);
+        });
 
     // ★ 重要: デプロイされたGASウェブアプリのURLをここに設定してください
     const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbwZw61TyYkb8fboc8mWRZGZUpzqRWUluykk2cQ4hKXQV83RySPsprsKVL9R8Luy4AbZtw/exec';
@@ -82,9 +93,11 @@ window.onload = function () {
             menu: menu,
             datetime: datetime,
             name: name,
+            name: name,
             phone: phone,
             notes: notes,
-            honeypot: honeypot // Bot check
+            honeypot: honeypot, // Bot check
+            userId: liff.getContext() ? liff.getContext().userId : null // Get User ID from LIFF Context
         };
 
         // Call GAS API via fetch
