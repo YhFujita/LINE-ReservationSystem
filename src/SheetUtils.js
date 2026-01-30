@@ -111,7 +111,7 @@ var SheetUtils = (function () {
 
             var menuItems = data.map(function (row) {
                 return {
-                    id: row[0],
+                    id: String(row[0]), // Ensure ID is string
                     name: row[1],
                     price: row[2],
                     duration: row[3],
@@ -119,7 +119,11 @@ var SheetUtils = (function () {
                     order: row[5]
                 };
             }).filter(function (item) { return item.id && item.name; })
-                .sort(function (a, b) { return a.order - b.order; });
+                .sort(function (a, b) {
+                    var orderA = parseInt(a.order) || 9999;
+                    var orderB = parseInt(b.order) || 9999;
+                    return orderA - orderB;
+                });
 
             PropertiesService.getScriptProperties().setProperty(CACHE_KEY_MENU, JSON.stringify(menuItems));
             return menuItems;
