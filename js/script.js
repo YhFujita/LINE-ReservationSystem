@@ -7,6 +7,16 @@ window.onload = function () {
             console.log("LIFF Initialized");
             if (!liff.isLoggedIn()) {
                 liff.login();
+            } else {
+                // Auto-fill name from LINE Profile
+                liff.getProfile()
+                    .then(profile => {
+                        const nameInput = document.getElementById('name');
+                        if (nameInput && !nameInput.value) {
+                            nameInput.value = profile.displayName;
+                        }
+                    })
+                    .catch(err => console.error('Profile fetch failed', err));
             }
         })
         .catch((err) => {
