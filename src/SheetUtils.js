@@ -1,5 +1,6 @@
 var SheetUtils = (function () {
-    var SPREADSHEET_ID = PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID');
+    // var SPREADSHEET_ID = PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID'); // Move inside function to ensure fresh fetch and safety
+
     var SHEET_NAME_RESERVATIONS = '予約一覧';
     var SHEET_NAME_MENU = 'メニュー設定';
     var SHEET_NAME_SLOTS = '予約可能日時';
@@ -7,9 +8,31 @@ var SheetUtils = (function () {
     var CACHE_KEY_SLOTS = 'SLOTS_CACHE';
 
     function getSheet(name) {
-        var ss = SPREADSHEET_ID
-            ? SpreadsheetApp.openById(SPREADSHEET_ID)
-            : SpreadsheetApp.getActiveSpreadsheet();
+        var id = PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID');
+        if (id) id = id.trim();
+
+        var ss;
+        if (id) {
+            try {
+                ss = SpreadsheetApp.openById(id);
+            } catch (e) {
+                console.error('Error opening Spreadsheet with ID: ' + id, e);
+                // Fallback to active spreadsheet if ID is invalid? 
+                // However, user specifically set an ID, so it's better to fail or warn. 
+                // But for now, let's throw a clearer error.
+                throw new Error('スクリプトプロパティで指定されたスプレッドシートを開けませんでした。IDが正しいか確認してください (ID: ' + id + ') エラー: ' + e.message);
+            }
+        } else {
+            // Not set -> use active
+            try {
+                ss = SpreadsheetApp.getActiveSpreadsheet();
+            } catch (e) {
+                throw new Error('アクティブなスプレッドシートを取得できませんでした。スタンドアロンスクリプトの場合はSPREADSHEET_IDを設定してください。');
+            }
+        }
+
+        if (!ss) throw new Error('スプレッドシートが見つかりません。');
+
         var sheet = ss.getSheetByName(name);
 
         // Auto-create sheets if missing
@@ -164,9 +187,16 @@ var SheetUtils = (function () {
         addSlots: function (slots) {
             var sheet = getSheet(SHEET_NAME_SLOTS);
             var lastRow = sheet.getLastRow();
+            var timeZone = Session.getScriptTimeZone();
 
             var rowsToAdd = slots.map(function (slot) {
-                return [slot, '空き']; // slot is string "yyyy/MM/dd HH:mm"
+                var date = new Date(slot);
+                if (isNaN(date.getTime())) {
+                    // Check if valid date
+                    return [slot, '空き'];
+                }
+                var formattedSlot = formatDateJP(date);
+                return [formattedSlot, '空き'];
             });
 
             if (rowsToAdd.length > 0) {
