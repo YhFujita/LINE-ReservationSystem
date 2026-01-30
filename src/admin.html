@@ -428,7 +428,7 @@
                 const priceFormatted = Number(item.price).toLocaleString();
                 li.innerHTML = `
                 <div class="item-info">
-                    <strong>${item.name}</strong> (${priceFormatted}円)
+                    <strong>${item.name}</strong> (${priceFormatted}円 / ${item.duration}分)
                     <br><small>${item.description}</small>
                 </div>
                 <div class="item-actions">
