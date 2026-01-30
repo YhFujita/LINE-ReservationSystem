@@ -25,7 +25,7 @@ window.onload = function () {
             return;
         }
 
-        if (GAS_API_URL === 'YOUR_GAS_WEB_APP_URL') {
+        if (GAS_API_URL === 'https://script.google.com/macros/s/AKfycbwZw61TyYkb8fboc8mWRZGZUpzqRWUluykk2cQ4hKXQV83RySPsprsKVL9R8Luy4AbZtw/exec') {
             alert('GAS_API_URLが設定されていません。script.jsを確認してください。');
             return;
         }
