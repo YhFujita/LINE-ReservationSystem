@@ -68,8 +68,9 @@ window.onload = function () {
             return;
         }
 
-        if (GAS_API_URL === 'https://script.google.com/macros/s/AKfycbwZw61TyYkb8fboc8mWRZGZUpzqRWUluykk2cQ4hKXQV83RySPsprsKVL9R8Luy4AbZtw/exec') {
-            alert('GAS_API_URLが設定されていません。script.jsを確認してください。');
+        // if (GAS_API_URL === '...') check removed because it was flagging the valid URL as invalid.
+        if (!GAS_API_URL || GAS_API_URL.includes('YOUR_SCRIPT_ID')) {
+            alert('GAS_API_URLが正しく設定されていません。');
             return;
         }
 
