@@ -214,7 +214,6 @@
                 <input type="text" id="menuName" placeholder="メニュー名">
                 <input type="number" id="menuPrice" placeholder="価格（円）">
                 <input type="number" id="menuDuration" placeholder="所要時間（分）">
-                <input type="number" id="menuDuration" placeholder="所要時間（分）">
                 <input type="text" id="menuSection" placeholder="セクションタイトル（項目の上に表示：例「コース」）">
                 <textarea id="menuDesc" placeholder="説明" rows="2"></textarea>
                 <input type="hidden" id="menuOrder"> <!-- Hidden, managed by list order -->
@@ -463,8 +462,6 @@
             document.getElementById('menuName').value = item.name;
             document.getElementById('menuPrice').value = item.price;
             document.getElementById('menuDuration').value = item.duration;
-            document.getElementById('menuPrice').value = item.price;
-            document.getElementById('menuDuration').value = item.duration;
             document.getElementById('menuSection').value = item.section || '';
             document.getElementById('menuDesc').value = item.menuDesc || item.description;
             // Order is preserved but hidden
@@ -477,7 +474,6 @@
             document.getElementById('menuName').value = '';
             document.getElementById('menuPrice').value = '';
             document.getElementById('menuDuration').value = '';
-            document.getElementById('menuDuration').value = '';
             document.getElementById('menuSection').value = '';
             document.getElementById('menuDesc').value = '';
             // document.getElementById('menuOrder').value = '';
@@ -487,9 +483,6 @@
         function saveMenu() {
             const item = {
                 id: document.getElementById('menuId').value,
-                name: document.getElementById('menuName').value,
-                price: document.getElementById('menuPrice').value,
-                duration: document.getElementById('menuDuration').value,
                 name: document.getElementById('menuName').value,
                 price: document.getElementById('menuPrice').value,
                 duration: document.getElementById('menuDuration').value,
