@@ -40,11 +40,34 @@ window.onload = function () {
                 // Populate Menu
                 if (data.menu) {
                     menuSelect.innerHTML = '<option value="" disabled selected>メニューを選択してください</option>';
+
+                    let currentSection = null;
+                    let currentGroup = null;
+
                     data.menu.forEach(item => {
+                        // Check if section changed
+                        const itemSection = item.section || '';
+
+                        if (itemSection !== currentSection) {
+                            currentSection = itemSection;
+                            if (currentSection) {
+                                currentGroup = document.createElement('optgroup');
+                                currentGroup.label = currentSection;
+                                menuSelect.appendChild(currentGroup);
+                            } else {
+                                currentGroup = null; // Reset to root
+                            }
+                        }
+
                         const option = document.createElement('option');
                         option.value = item.id;
                         option.textContent = `${item.name} (${item.duration}分) - ¥${Number(item.price).toLocaleString()}`;
-                        menuSelect.appendChild(option);
+
+                        if (currentGroup) {
+                            currentGroup.appendChild(option);
+                        } else {
+                            menuSelect.appendChild(option);
+                        }
                     });
                 }
                 // Populate Slots
