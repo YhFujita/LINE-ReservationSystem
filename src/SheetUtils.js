@@ -1,6 +1,6 @@
 var SheetUtils = (function () {
-    // Updated: Fix Date Parsing
-    // var SPREADSHEET_ID = PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID'); // Move inside function to ensure fresh fetch and safety
+    // Updated: Fix Date Parsing & Add Columns
+    // var SPREADSHEET_ID = PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID'); 
 
     var SHEET_NAME_RESERVATIONS = '予約一覧';
     var SHEET_NAME_MENU = 'メニュー設定';
@@ -19,13 +19,9 @@ var SheetUtils = (function () {
                 ss = SpreadsheetApp.openById(id);
             } catch (e) {
                 console.error('Error opening Spreadsheet with ID: ' + id, e);
-                // Fallback to active spreadsheet if ID is invalid? 
-                // However, user specifically set an ID, so it's better to fail or warn. 
-                // But for now, let's throw a clearer error.
                 throw new Error('スクリプトプロパティで指定されたスプレッドシートを開けませんでした。IDが正しいか確認してください (ID: ' + id + ') エラー: ' + e.message);
             }
         } else {
-            // Not set -> use active
             try {
                 ss = SpreadsheetApp.getActiveSpreadsheet();
             } catch (e) {
@@ -41,11 +37,10 @@ var SheetUtils = (function () {
         if (!sheet) {
             sheet = ss.insertSheet(name);
             if (name === SHEET_NAME_RESERVATIONS) {
-                // Modified header to include '金額', swapped Date columns
-                sheet.appendRow(['希望日時', '予約ID', '予約者名', 'メニュー', '金額', '送信日時', '電話番号', '備考', 'ステータス', 'GoogleEventID']);
+                // 新しいヘッダー構成
+                sheet.appendRow(['希望日時', '予約ID', '予約者名', 'メニュー(ID)', 'メニュー名', '税抜金額', '消費税', '金額(税込)', '送信日時', '電話番号', '備考', 'ステータス', 'GoogleEventID']);
             } else if (name === SHEET_NAME_MENU) {
                 sheet.appendRow(['ID', 'メニュー名', '価格', '所要時間(分)', '説明', '表示順', 'カテゴリタイトル']);
-                // Add sample data
                 sheet.appendRow(['basic', 'ベーシックコース', '6000', '60', '基本のコースです', '1']);
                 sheet.appendRow(['premium', 'プレミアムコース', '9000', '90', '充実のコースです', '2']);
             } else if (name === SHEET_NAME_SLOTS) {
@@ -60,6 +55,24 @@ var SheetUtils = (function () {
                     '■金額: {{price}}円\n\n' +
                     'ご来店をお待ちしております。';
                 sheet.appendRow(['LINE_MESSAGE_TEMPLATE', defaultTemplate]);
+            }
+        } else if (name === SHEET_NAME_RESERVATIONS) {
+            // Check for Migration (Add MenuName, TaxExcl, Tax Columns)
+            // Old Header: [希望日時, 予約ID, 予約者名, メニュー, 金額, ...]
+            // New Header: [希望日時, 予約ID, 予約者名, メニュー(ID), メニュー名, 税抜金額, 消費税, 金額(税込), ...]
+            var header = sheet.getRange(1, 1, 1, 10).getValues()[0];
+            // E列(index 4)が「金額」だったら旧形式
+            if (header[4] === '金額') {
+                // D列(index 3, メニュー)の後に3列挿入
+                sheet.insertColumnsAfter(4, 3);
+                // ヘッダー更新
+                sheet.getRange(1, 4).setValue('メニュー(ID)');
+                sheet.getRange(1, 5).setValue('メニュー名');
+                sheet.getRange(1, 6).setValue('税抜金額');
+                sheet.getRange(1, 7).setValue('消費税');
+                sheet.getRange(1, 8).setValue('金額(税込)');
+                // 以降のヘッダーは自動的にずれているはずだが、念のため確認
+                // F->I, G->J, H->K, I->L, J->M
             }
         }
         return sheet;
@@ -77,12 +90,9 @@ var SheetUtils = (function () {
     }
 
     // 日付文字列のパース用ヘルパー関数
-    // "YYYY/MM/DD HH:mm" または "YYYY-MM-DD HH:mm" 形式の文字列をDateオブジェクトに変換
     function parseDatetimeString(datetimeStr) {
         if (!datetimeStr) return null;
-        // スラッシュをハイフンに統一してからパース
         var normalized = String(datetimeStr).replace(/\//g, '-');
-        // "YYYY-MM-DD HH:mm" 形式を分解
         var match = normalized.match(/(\d{4})-(\d{1,2})-(\d{1,2})\s+(\d{1,2}):(\d{2})/);
         if (match) {
             return new Date(
@@ -93,7 +103,6 @@ var SheetUtils = (function () {
                 parseInt(match[5], 10)
             );
         }
-        // フォールバック: 通常のパース
         var d = new Date(datetimeStr);
         if (!isNaN(d.getTime())) return d;
         return null;
@@ -105,30 +114,46 @@ var SheetUtils = (function () {
             var id = Utilities.getUuid();
             var timestamp = new Date();
             var formattedTimestamp = formatDateJP(timestamp);
-
-            // Convert normalized input datetime (YYYY/MM/DD HH:mm) to Display Format for consistent sheet storage
             var bookingDate = new Date(data.datetime);
             var formattedBookingDate = formatDateJP(bookingDate);
 
-            // Lookup Price
-            var price = '';
+            // Lookup Price & Menu Name
+            var price = 0;
+            var menuName = '';
             var menuItems = this.getMenuItems();
             var selectedMenu = menuItems.find(function (item) { return item.id === data.menu; });
             if (selectedMenu) {
-                price = selectedMenu.price;
+                price = parseInt(selectedMenu.price, 10) || 0;
+                menuName = selectedMenu.name;
             }
 
+            // Calculate Tax
+            var taxRate = 0.10;
+            var priceExcl = Math.ceil(price / (1 + taxRate)); // 税込から逆算なので切り上げor四捨五入？一般的には 本体 + 消費税 = 税込
+            // 税抜 = 税込 / 1.1 -> 端数処理。
+            // 例: 1100円 -> 1000円
+            // 例: 100円 -> 90.9... -> 91円?
+            // 日本の商慣習では「切り捨て」が多いが、税込価格設定の場合は「内税」計算。
+            // 国税庁: 総額表示。消費税額 = 支払総額 × 10 / 110 (円未満端数処理は事業者の判断)
+            // ここでは「切り捨て」で計算し、残りを本体とするのが安全か、あるいは 本体=round(税込/1.1) か。
+            // ここではシンプルに: 税抜 = Math.floor(price / 1.1), 税 = price - 税抜
+            var priceExcl = Math.floor(price / 1.1);
+            var tax = price - priceExcl;
+
             sheet.appendRow([
-                formattedBookingDate, // Desired Date (A Column)
-                id,
-                data.name,
-                data.menu,
-                price, // Saved Price
-                formattedTimestamp, // Recorded at (F Column)
-                "'" + data.phone,
-                data.notes,
-                '受付',
-                data.googleEventId || '' // GoogleEventID (J Column)
+                formattedBookingDate, // A
+                id,                   // B
+                data.name,            // C
+                data.menu,            // D (Menu ID)
+                menuName,             // E (Menu Name)
+                priceExcl,            // F (Excl Tax)
+                tax,                  // G (Tax)
+                price,                // H (Incl Tax)
+                formattedTimestamp,   // I
+                "'" + data.phone,     // J
+                data.notes,           // K
+                '受付',               // L
+                data.googleEventId || '' // M
             ]);
             return id;
         },
@@ -147,15 +172,13 @@ var SheetUtils = (function () {
 
             var menuItems = data.map(function (row) {
                 return {
-                    id: String(row[0]), // Ensure ID is string
+                    id: String(row[0]),
                     name: row[1],
                     price: row[2],
                     duration: row[3],
                     description: row[4],
-                    duration: row[3],
-                    description: row[4],
                     order: row[5],
-                    section: row[6] || '' // Category/Section Title
+                    section: row[6] || ''
                 };
             }).filter(function (item) { return item.id && item.name; })
                 .sort(function (a, b) {
@@ -169,7 +192,6 @@ var SheetUtils = (function () {
         },
 
         getAvailableSlots: function () {
-            // Try Cache First
             var scriptProperties = PropertiesService.getScriptProperties();
             var cachedSlots = scriptProperties.getProperty(CACHE_KEY_SLOTS);
             if (cachedSlots) {
@@ -183,7 +205,6 @@ var SheetUtils = (function () {
             var data = sheet.getDataRange().getValues();
             var headers = data.shift();
 
-            // Filter for "空き" slots
             var slots = data.filter(function (row) {
                 return row[1] === '空き';
             }).map(function (row) {
@@ -207,33 +228,28 @@ var SheetUtils = (function () {
             var data = sheet.getDataRange().getValues();
             var timeZone = Session.getScriptTimeZone();
 
-            // Find row to update
-            for (var i = 1; i < data.length; i++) { // Skip header
+            for (var i = 1; i < data.length; i++) {
                 var cellDate = new Date(data[i][0]);
                 var cellStatus = data[i][1];
                 var cellDateStr = Utilities.formatDate(cellDate, timeZone, 'yyyy/MM/dd HH:mm');
 
                 if (cellDateStr === targetDatetimeStr) {
                     if (cellStatus !== '空き') {
-                        return false; // Already reserved
+                        return false;
                     }
-                    // Update status to '予約済'
                     sheet.getRange(i + 1, 2).setValue('予約済');
-                    // Update cache immediately
                     this.updateSlotsCache();
-                    return true; // Success
+                    return true;
                 }
             }
-            return false; // Slot not found or invalid
+            return false;
         },
 
         addSlots: function (slots) {
             var sheet = getSheet(SHEET_NAME_SLOTS);
-
-            // 1. Get existing dates to prevent duplicates
             var existingData = sheet.getDataRange().getValues();
-            var existingTimes = {}; // Use object for O(1) lookup
-            for (var i = 1; i < existingData.length; i++) { // Skip header
+            var existingTimes = {};
+            for (var i = 1; i < existingData.length; i++) {
                 var d = new Date(existingData[i][0]);
                 if (!isNaN(d.getTime())) {
                     existingTimes[d.getTime()] = true;
@@ -243,7 +259,6 @@ var SheetUtils = (function () {
             var rowsToAdd = [];
             slots.forEach(function (slot) {
                 var date = new Date(slot);
-                // Check validity and duplication
                 if (!isNaN(date.getTime()) && !existingTimes[date.getTime()]) {
                     rowsToAdd.push([date, '空き']);
                 }
@@ -256,21 +271,15 @@ var SheetUtils = (function () {
                 range.setValues(rowsToAdd);
             }
 
-            // 2. Auto-sort: Status (Desc) -> Date (Asc)
-            // '空き' (Open) > '予約済' (Reserved) because '空' (U+7A7A) > '予' (U+4E88)
             var totalRows = sheet.getLastRow();
             if (totalRows > 1) {
-                // Sort range excluding header (row 1)
                 sheet.getRange(2, 1, totalRows - 1, 2).sort([
-                    { column: 2, ascending: false }, // Status: Open first
-                    { column: 1, ascending: true }   // Date: Chronological
+                    { column: 2, ascending: false },
+                    { column: 1, ascending: true }
                 ]);
             }
-
             return this.updateSlotsCache();
         },
-
-        // --- Admin Functions ---
 
         deleteSlot: function (targetDatetimeStr) {
             var sheet = getSheet(SHEET_NAME_SLOTS);
@@ -281,7 +290,6 @@ var SheetUtils = (function () {
                 var cellDate = new Date(data[i][0]);
                 var cellDateStr = Utilities.formatDate(cellDate, timeZone, 'yyyy/MM/dd HH:mm');
 
-                // Compare with target datetime (assuming target passed as normalized string)
                 if (cellDateStr === targetDatetimeStr) {
                     sheet.deleteRow(i + 1);
                     this.updateSlotsCache();
@@ -315,7 +323,6 @@ var SheetUtils = (function () {
             var timeZone = Session.getScriptTimeZone();
             var newDateStr = Utilities.formatDate(newDateObj, timeZone, 'yyyy/MM/dd HH:mm');
 
-            // 1. Check for duplicates (exclude the current slot being edited if it was unchanged, but here we check consistency)
             for (var i = 1; i < data.length; i++) {
                 var d = new Date(data[i][0]);
                 if (!isNaN(d.getTime())) {
@@ -326,15 +333,12 @@ var SheetUtils = (function () {
                 }
             }
 
-            // 2. Find and update
             for (var i = 1; i < data.length; i++) {
                 var cellDate = new Date(data[i][0]);
                 var cellDateStr = Utilities.formatDate(cellDate, timeZone, 'yyyy/MM/dd HH:mm');
 
                 if (cellDateStr === currentDatetimeStr) {
                     sheet.getRange(i + 1, 1).setValue(newDateObj);
-
-                    // 3. Sort
                     var totalRows = sheet.getLastRow();
                     if (totalRows > 1) {
                         sheet.getRange(2, 1, totalRows - 1, 2).sort([
@@ -342,7 +346,6 @@ var SheetUtils = (function () {
                             { column: 1, ascending: true }
                         ]);
                     }
-
                     this.updateSlotsCache();
                     return { success: true };
                 }
@@ -355,11 +358,9 @@ var SheetUtils = (function () {
             var data = sheet.getDataRange().getValues();
             var updated = false;
 
-            // Try to update existing
             if (item.id) {
                 for (var i = 1; i < data.length; i++) {
                     if (data[i][0] == item.id) {
-                        // Update row (now 7 cols)
                         var range = sheet.getRange(i + 1, 1, 1, 7);
                         range.setValues([[
                             item.id,
@@ -370,8 +371,6 @@ var SheetUtils = (function () {
                             item.order,
                             item.section
                         ]]);
-                        // Format Price (Column 3 is relative index 2? No, getRange(row, 1, 1, 6) -> 3rd cell is col index 3 in sheet)
-                        // sheet.getRange(row, col) -> Price is 3rd column
                         sheet.getRange(i + 1, 3).setNumberFormat('#,##0');
                         updated = true;
                         break;
@@ -379,7 +378,6 @@ var SheetUtils = (function () {
                 }
             }
 
-            // Insert new if not updated
             if (!updated) {
                 item.id = item.id || Utilities.getUuid();
                 sheet.appendRow([
@@ -391,34 +389,25 @@ var SheetUtils = (function () {
                     item.order,
                     item.section
                 ]);
-                // Format the newly added row's price column
                 var lastRow = sheet.getLastRow();
                 sheet.getRange(lastRow, 3).setNumberFormat('#,##0');
             }
-
             return this.updateMenuCache();
         },
 
         reorderMenuItems: function (ids) {
             var sheet = getSheet(SHEET_NAME_MENU);
             var data = sheet.getDataRange().getValues();
-            var idMap = {}; // Map ID to Row Index for O(1)
-
-            // Build map (skip header)
+            var idMap = {};
             for (var i = 1; i < data.length; i++) {
-                idMap[String(data[i][0])] = i + 1; // 1-based index
+                idMap[String(data[i][0])] = i + 1;
             }
-
-            // Update order for each ID in the new list
             ids.forEach(function (id, index) {
                 var rowIndex = idMap[id];
                 if (rowIndex) {
-                    // Update 'order' column (Column 6) with new index (1-based or 0-based doesn't matter as long as it sorts)
-                    // We use (index + 1) * 10 to leave room if needed
                     sheet.getRange(rowIndex, 6).setValue((index + 1) * 10);
                 }
             });
-
             return this.updateMenuCache();
         },
 
@@ -428,14 +417,10 @@ var SheetUtils = (function () {
             var timeZone = Session.getScriptTimeZone();
             var results = [];
 
-            // Skip header (row 1)
             for (var i = 1; i < data.length; i++) {
                 var row = data[i];
-                // Check if date is valid
                 var d = new Date(row[0]);
                 if (isNaN(d.getTime())) {
-                    // Try parsing Japanese format: "yyyy年M月d日(day) H:m"
-                    // Regex to capture digits. Ignore the day of week char.
                     var match = String(row[0]).match(/(\d+)年(\d+)月(\d+)日\s*\(.\)\s*(\d+):(\d+)/);
                     if (match) {
                         d = new Date(
@@ -449,34 +434,42 @@ var SheetUtils = (function () {
                 }
                 if (isNaN(d.getTime())) continue;
 
-                // Columns: 0:Date, 1:ID, 2:Name, 3:MenuID, 4:Price, 5:Timestamp, 6:Phone, 7:Notes, 8:Status, 9:GoogleEventID
+                // Columns: 
+                // 0:Date, 1:ID, 2:Name, 3:MenuID, 4:MenuName, 5:Excl, 6:Tax, 7:Incl, 8:Time, 9:Phone, 10:Notes, 11:Status, 12:EventID
+                // 注意: 旧データで列が不足している場合のガードが必要かもしれないが、
+                // getSheetで列挿入しているので data.length は増えているはず?
+                // data = getValues() はシート全体のデータを取るので、行によって列数が違うことはない(空白になる)
+
+                // 互換性: 旧データのこの列は空白かもしれない
+                var price = row[7]; // New Price Column (Incl)
+                if (price === undefined || price === '') {
+                    // もしかして列追加前のキャッシュを見てる？いや getValues() は最新
+                    // マイグレーション直後はデータが入ってないかも
+                    // しかし列シフトで元の"金額"は列7に来ているはず
+                }
+
                 results.push({
                     date: Utilities.formatDate(d, timeZone, 'yyyy/MM/dd HH:mm'),
-                    displayDate: row[0], // Use original string as display or re-format? Original is fine if consistent.
+                    displayDate: row[0],
                     id: row[1],
                     name: row[2],
                     menuId: row[3],
-                    price: row[4],
-                    phone: row[6],
-                    notes: row[7],
-                    status: row[8],
-                    googleEventId: row[9] || ''
+                    price: row[7], // H列
+                    phone: row[9], // J列
+                    notes: row[10], // K列
+                    status: row[11], // L列
+                    googleEventId: row[12] || '' // M列
                 });
             }
-
-            // Sort by Date Descending (Newest first) or Ascending (Future first)?
-            // Usually Admin wants to see upcoming. Ascending.
             results.sort(function (a, b) {
                 return a.date.localeCompare(b.date);
             });
-
             return results;
         },
 
         deleteMenuItem: function (id) {
             var sheet = getSheet(SHEET_NAME_MENU);
             var data = sheet.getDataRange().getValues();
-
             for (var i = 1; i < data.length; i++) {
                 if (data[i][0] == id) {
                     sheet.deleteRow(i + 1);
@@ -490,10 +483,10 @@ var SheetUtils = (function () {
         setReservationGoogleEventId: function (reservationId, eventId) {
             var sheet = getSheet(SHEET_NAME_RESERVATIONS);
             var data = sheet.getDataRange().getValues();
-
             for (var i = 1; i < data.length; i++) {
-                if (data[i][1] == reservationId) { // Column B is ID
-                    sheet.getRange(i + 1, 10).setValue(eventId); // Column J is GoogleEventID
+                if (data[i][1] == reservationId) {
+                    // Update Column M (13th column)
+                    sheet.getRange(i + 1, 13).setValue(eventId);
                     return true;
                 }
             }
@@ -503,7 +496,6 @@ var SheetUtils = (function () {
         getReservation: function (reservationId) {
             var sheet = getSheet(SHEET_NAME_RESERVATIONS);
             var data = sheet.getDataRange().getValues();
-
             for (var i = 1; i < data.length; i++) {
                 if (data[i][1] == reservationId) {
                     var d = new Date(data[i][0]);
@@ -524,8 +516,8 @@ var SheetUtils = (function () {
                         date: d,
                         id: data[i][1],
                         menu: data[i][3],
-                        status: data[i][8],
-                        googleEventId: data[i][9]
+                        status: data[i][11], // L列
+                        googleEventId: data[i][12] // M列
                     };
                 }
             }
@@ -539,8 +531,8 @@ var SheetUtils = (function () {
 
             for (var i = 1; i < data.length; i++) {
                 if (data[i][1] == reservationId) {
-                    // 1. Update Status
-                    sheet.getRange(i + 1, 9).setValue('キャンセル');
+                    // 1. Update Status (L列 / Column 12)
+                    sheet.getRange(i + 1, 12).setValue('キャンセル');
 
                     // 2. Release Slot
                     var date = new Date(data[i][0]);
@@ -561,7 +553,7 @@ var SheetUtils = (function () {
 
                     return {
                         success: true,
-                        googleEventId: data[i][9],
+                        googleEventId: data[i][12], // M列
                         date: dateStr,
                         menu: data[i][3]
                     };
@@ -578,34 +570,53 @@ var SheetUtils = (function () {
             var timeZone = Session.getScriptTimeZone();
             var currentDatetimeStr = Utilities.formatDate(res.date, timeZone, 'yyyy/MM/dd HH:mm');
 
-            // parseDatetimeString を使用して日付をパース
             var newDateObj = parseDatetimeString(newDatetime);
             if (!newDateObj) {
                 return { success: false, message: '日時の形式が正しくありません: ' + newDatetime };
             }
             var newDatetimeStr = Utilities.formatDate(newDateObj, timeZone, 'yyyy/MM/dd HH:mm');
 
-            // 1. Check if new slot is available (unless it's the same time)
             if (currentDatetimeStr !== newDatetimeStr) {
                 if (!this.reserveSlot(newDatetimeStr)) {
                     return { success: false, message: '変更先の日時は既に埋まっています。' };
                 }
-                // Release old slot
                 this.updateSlotStatus(currentDatetimeStr, '空き');
             }
 
-            // 2. Update Reservation Data
             var row = res.row;
-            // Update Date (Col A)
             sheet.getRange(row, 1).setValue(formatDateJP(newDateObj));
 
-            // Update Menu & Price if changed
+            // メニュー更新
             if (newMenuId && newMenuId !== res.menu) {
                 var menuItems = this.getMenuItems();
                 var selectedMenu = menuItems.find(function (item) { return item.id === newMenuId; });
                 if (selectedMenu) {
-                    sheet.getRange(row, 4).setValue(newMenuId); // メニューID (Col D)
-                    sheet.getRange(row, 5).setValue(selectedMenu.price); // 価格 (Col E)
+                    sheet.getRange(row, 4).setValue(newMenuId); // メニューID (D)
+                    var price = parseInt(selectedMenu.price, 10) || 0;
+                    var priceExcl = Math.floor(price / 1.1);
+                    var tax = price - priceExcl;
+                    sheet.getRange(row, 5).setValue(selectedMenu.name); // メニュー名 (E)
+                    sheet.getRange(row, 6).setValue(priceExcl); // 税抜 (F)
+                    sheet.getRange(row, 7).setValue(tax); // 税 (G)
+                    sheet.getRange(row, 8).setValue(price); // 税込 (H)
+                }
+            } else if (!newMenuId) {
+                // メニューが変わらない場合でも、価格列などが空なら埋めるべきだが、既存データの更新は今回は必須ではない
+                // ただし、もしメニューIDしかない旧データに対して更新がかかった場合、ここでメニュー名を埋めてあげる親切設計はあり
+                var currentResData = sheet.getRange(row, 1, 1, 8).getValues()[0];
+                var currentMenuName = currentResData[4];
+                if (!currentMenuName) {
+                    var menuItems = this.getMenuItems();
+                    var selectedMenu = menuItems.find(function (item) { return item.id === res.menu; });
+                    if (selectedMenu) {
+                        var price = parseInt(selectedMenu.price, 10) || 0;
+                        var priceExcl = Math.floor(price / 1.1);
+                        var tax = price - priceExcl;
+                        sheet.getRange(row, 5).setValue(selectedMenu.name);
+                        sheet.getRange(row, 6).setValue(priceExcl);
+                        sheet.getRange(row, 7).setValue(tax);
+                        sheet.getRange(row, 8).setValue(price);
+                    }
                 }
             }
 
