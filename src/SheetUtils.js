@@ -1,4 +1,5 @@
 var SheetUtils = (function () {
+    // Updated: Fix Date Parsing
     // var SPREADSHEET_ID = PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID'); // Move inside function to ensure fresh fetch and safety
 
     var SHEET_NAME_RESERVATIONS = '予約一覧';

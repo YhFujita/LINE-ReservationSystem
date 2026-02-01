@@ -678,7 +678,10 @@
                     newDatetime: newDatetime,
                     newMenuId: newMenuId
                 })
-            }).then(res => res.json())
+            }).then(res => {
+                if (!res.ok) throw new Error('Network response was not ok');
+                return res.json();
+            })
                 .then(data => {
                     if (data.status === 'success') {
                         showMessage('予約を変更しました');
@@ -687,6 +690,10 @@
                     } else {
                         showMessage('エラー: ' + data.message, true);
                     }
+                })
+                .catch(e => {
+                    console.error(e);
+                    showMessage('エラー: ' + e.message, true);
                 });
         }
 
