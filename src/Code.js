@@ -132,20 +132,8 @@ function doPost(e) {
                         if (calendarId) {
                             try {
                                 var menuItems = SheetUtils.getMenuItems();
-                                // If menu changed, get new duration. If not, we might need to look up current menu?
-                                // Simplified: If newMenuId provided, use it. If not, we might lack duration info 
-                                // if we don't fetch the existing reservation's menu.
-                                // SheetUtils.updateReservation handles the sheet update.
-                                // Let's just assume for now we can get the duration easily if we know the menu.
-                                // If newMenuId is null, use existing menu? Code.js doesn't know existing menu ID easily without query.
-                                // Let's just fetch the reservation to be sure or trust the input?
-                                // Better: SheetUtils already looked it up. Let's make SheetUtils return the menu ID used?
-                                // For now, let's just use a default or fetch if passed.
-                                // The user likely passes newMenuId if they want to change it.
-
                                 var menuId = data.newMenuId;
                                 if (!menuId) {
-                                    // If not provided, we need to find what the current menu is to calculate end time.
                                     var currentRes = SheetUtils.getReservation(data.reservationId);
                                     if (currentRes) menuId = currentRes.menu;
                                 }
@@ -153,30 +141,38 @@ function doPost(e) {
                                 var selectedMenu = menuItems.find(function (m) { return m.id === menuId; });
                                 var duration = selectedMenu ? parseInt(selectedMenu.duration, 10) : 60;
 
-                                // SheetUtils.updateReservationから返されるパース済みの日付を使用
-                                var newStartTime = res.newDate;
+                                // 日付の生成（念のため new Date でラップ）
+                                var newStartTime = new Date(res.newDate);
                                 var newEndTime = new Date(newStartTime.getTime() + duration * 60000);
+
+                                console.log('Calendar Update Start: EventID=' + res.googleEventId);
+                                console.log('New Time: ' + newStartTime + ' - ' + newEndTime);
 
                                 var cal = CalendarApp.getCalendarById(calendarId);
                                 var evt = cal.getEventById(res.googleEventId);
                                 if (evt) {
                                     evt.setTime(newStartTime, newEndTime);
+                                    console.log('Calendar Time Updated');
+
                                     // メニューが変更された場合、説明も更新
                                     if (selectedMenu && data.newMenuId) {
-                                        // 予約詳細を取得して説明を再構築
                                         var resDetail = SheetUtils.getReservation(data.reservationId);
                                         if (resDetail) {
-                                            // シートから名前、電話、備考を取得
                                             var sheet = SpreadsheetApp.openById(PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID')).getSheetByName('予約一覧');
                                             var rowData = sheet.getRange(resDetail.row, 1, 1, 10).getValues()[0];
                                             var phone = rowData[6] || '';
                                             var notes = rowData[7] || '';
                                             var newDesc = 'メニュー: ' + selectedMenu.name + '\n電話: ' + phone + '\n備考: ' + notes;
                                             evt.setDescription(newDesc);
+                                            console.log('Calendar Description Updated');
                                         }
                                     }
+                                } else {
+                                    console.warn('Calendar Event Not Found: ' + res.googleEventId);
                                 }
-                            } catch (e) { console.error('Calendar Update Error:', e); }
+                            } catch (e) {
+                                console.error('Calendar Update Error:', e);
+                            }
                         }
                     }
                     output.setContent(JSON.stringify({ status: 'success' }));
